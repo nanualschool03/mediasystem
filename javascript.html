@@ -1,0 +1,637 @@
+<script>
+  // --- STATE MANAGEMENT ---
+  let allMedia = [];
+  let allTeachers = [];
+  let systemSettings = {};
+  let currentFilters = { month: 'all', teacher: 'all' };
+  let currentPage = 1;
+  const ROWS_PER_PAGE = 15;
+  let selectedFile = null;
+  let monthlyChartInstance = null;
+  let typeChartInstance = null;
+
+  // --- INITIALIZATION ---
+  document.addEventListener('DOMContentLoaded', () => {
+    lucide.createIcons();
+    showLoading('กำลังโหลดข้อมูลเริ่มต้น...');
+    google.script.run
+      .withSuccessHandler(onInitialDataLoaded)
+      .withFailureHandler(showError)
+      .getInitialData();
+
+    setupEventListeners();
+    navigateTo(window.location.hash || '#dashboard');
+  });
+
+  function onInitialDataLoaded(data) {
+    if (data.success) {
+      allMedia = data.media;
+      allTeachers = data.teachers;
+      systemSettings = data.settings;
+
+      renderDashboard();
+      populateTeacherDropdowns();
+      renderRegisterPage(data.nextId);
+      renderSettingsPage();
+      renderExportPage();
+
+      Swal.close();
+    } else {
+      showError(data.error);
+    }
+  }
+
+  // --- EVENT LISTENERS ---
+  function setupEventListeners() {
+    // Navigation
+    document.querySelectorAll('.nav-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        navigateTo(e.currentTarget.getAttribute('href'));
+      });
+    });
+
+    // Dashboard filters
+    document.getElementById('filter-month').addEventListener('change', (e) => {
+      currentFilters.month = e.target.value;
+      currentPage = 1;
+      renderMediaTable();
+    });
+    document.getElementById('filter-teacher').addEventListener('change', (e) => {
+      currentFilters.teacher = e.target.value;
+      currentPage = 1;
+      renderMediaTable();
+    });
+
+    // Register Form
+    document.getElementById('register-form').addEventListener('submit', handleRegisterSubmit);
+    document.getElementById('clear-form-btn').addEventListener('click', () => renderRegisterPage());
+
+    // File Drop Zone
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-upload');
+    dropZone.addEventListener('click', () => fileInput.click());
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, () => dropZone.classList.add('drop-zone--over'), false);
+    });
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, () => dropZone.classList.remove('drop-zone--over'), false);
+    });
+    dropZone.addEventListener('drop', handleDrop, false);
+    fileInput.addEventListener('change', (e) => handleFileSelect(e.target.files));
+
+    // Settings Form
+    document.getElementById('settings-form').addEventListener('submit', handleSettingsSubmit);
+    document.getElementById('add-teacher-form').addEventListener('submit', handleAddTeacherSubmit);
+
+    // Export/Print
+    document.getElementById('print-btn').addEventListener('click', handlePrint);
+    
+    // Image Modal
+    document.getElementById('close-modal').addEventListener('click', () => document.getElementById('image-modal').classList.add('hidden'));
+    document.getElementById('image-modal').addEventListener('click', (e) => {
+      if(e.target === e.currentTarget) {
+         document.getElementById('image-modal').classList.add('hidden');
+      }
+    });
+
+  }
+
+
+  // --- NAVIGATION & PAGE RENDERING ---
+  function navigateTo(hash) {
+    document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
+    const targetPage = document.querySelector(`#page-${hash.substring(1)}`);
+    if (targetPage) {
+      targetPage.classList.remove('hidden');
+    } else {
+      document.getElementById('page-dashboard').classList.remove('hidden');
+    }
+
+    document.querySelectorAll('.nav-link').forEach(link => {
+      if (link.getAttribute('href') === hash) {
+        link.classList.add('bg-blue-100', 'text-blue-800', 'font-semibold');
+      } else {
+        link.classList.remove('bg-blue-100', 'text-blue-800', 'font-semibold');
+      }
+    });
+    window.location.hash = hash;
+  }
+  
+  function renderDashboard() {
+    // Render cards and charts first
+    document.getElementById('total-media-card').textContent = allMedia.length;
+    renderMonthlyChart();
+    renderTypeChart();
+
+    // Populate filters and render table
+    populateDashboardFilters();
+    renderMediaTable();
+  }
+  
+  function renderRegisterPage(nextId = null) {
+      const form = document.getElementById('register-form');
+      form.reset();
+      const nextMediaId = nextId || (allMedia.length > 0 ? Math.max(...allMedia.map(m => m['ลำดับที่'])) + 1 : 1);
+      document.getElementById('sequence').value = nextMediaId;
+      document.getElementById('productionDate').value = new Date().toISOString().split('T')[0];
+      updateDropZonePreview(null);
+      selectedFile = null;
+  }
+  
+  function renderSettingsPage() {
+    document.getElementById('schoolName').value = systemSettings.schoolName || '';
+    document.getElementById('districtName').value = systemSettings.districtName || '';
+    renderTeacherList();
+  }
+  
+  function renderExportPage() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('export-start-date').value = '';
+    document.getElementById('export-end-date').value = today;
+  }
+
+  // --- COMPONENT RENDERING ---
+  
+  function populateTeacherDropdowns() {
+    const teacherSelects = document.querySelectorAll('#teacher, #filter-teacher, #export-teacher');
+    teacherSelects.forEach(select => {
+        const currentValue = select.value;
+        // Clear all except the first option if it exists
+        while (select.options.length > (select.id !== 'teacher' ? 1 : 0)) {
+            select.remove(select.id !== 'teacher' ? 1 : 0);
+        }
+        allTeachers.forEach(teacher => {
+            const option = document.createElement('option');
+            option.value = teacher['ชื่อ-สกุล'];
+            option.textContent = `${teacher['ชื่อ-สกุล']} (${teacher['ตำแหน่ง']})`;
+            select.appendChild(option);
+        });
+        select.value = currentValue;
+    });
+  }
+  
+  function populateDashboardFilters() {
+      const monthFilter = document.getElementById('filter-month');
+      monthFilter.innerHTML = '<option value="all">ทุกเดือน</option>';
+      const months = [...new Set(allMedia.map(item => item['เดือน']))].filter(Boolean);
+      months.sort((a, b) => new Date(`1 ${a} 2000`) - new Date(`1 ${b} 2000`));
+      months.forEach(month => {
+          const option = new Option(month, month);
+          monthFilter.appendChild(option);
+      });
+  }
+
+  function renderMediaTable() {
+      const tableBody = document.getElementById('media-table-body');
+      const paginationControls = document.getElementById('pagination-controls');
+      tableBody.innerHTML = '';
+      paginationControls.innerHTML = '';
+
+      let filteredMedia = [...allMedia];
+
+      if (currentFilters.month !== 'all') {
+        filteredMedia = filteredMedia.filter(m => m['เดือน'] === currentFilters.month);
+      }
+      if (currentFilters.teacher !== 'all') {
+        filteredMedia = filteredMedia.filter(m => m['ครูผู้ผลิตสื่อ'] === currentFilters.teacher);
+      }
+      
+      // Sort by sequence number descending
+      filteredMedia.sort((a, b) => b['ลำดับที่'] - a['ลำดับที่']);
+
+      const totalPages = Math.ceil(filteredMedia.length / ROWS_PER_PAGE);
+      if (currentPage > totalPages && totalPages > 0) {
+        currentPage = totalPages;
+      }
+      const start = (currentPage - 1) * ROWS_PER_PAGE;
+      const end = start + ROWS_PER_PAGE;
+      const paginatedMedia = filteredMedia.slice(start, end);
+
+      if (paginatedMedia.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500">ไม่พบข้อมูลสื่อ</td></tr>`;
+        return;
+      }
+      
+      paginatedMedia.forEach(item => {
+          const row = document.createElement('tr');
+          row.className = 'bg-white border-b hover:bg-gray-50';
+          const formattedDate = item['วันที่ผลิตสื่อ'] ? new Date(item['วันที่ผลิตสื่อ']).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
+          const imageUrl = item['ลิงก์ภาพสื่อ'];
+          const imageHtml = imageUrl 
+            ? `<img src="${imageUrl}" alt="Media thumbnail" class="w-16 h-12 object-cover rounded-md cursor-pointer hover:opacity-75" onclick="showImageModal('${imageUrl}')">`
+            : '<span class="text-gray-400">ไม่มีภาพ</span>';
+
+          row.innerHTML = `
+            <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">${String(item['ลำดับที่']).padStart(3,'0')}</td>
+            <td class="px-6 py-4">${formattedDate}</td>
+            <td class="px-6 py-4">${item['รายการสื่อ/อุปกรณ์']}</td>
+            <td class="px-6 py-4">${item['จำนวน']}</td>
+            <td class="px-6 py-4"><span class="px-2 py-1 text-xs font-medium rounded-full ${getBadgeColor(item['ประเภทสื่อ'])}">${item['ประเภทสื่อ']}</span></td>
+            <td class="px-6 py-4">${imageHtml}</td>
+          `;
+          tableBody.appendChild(row);
+      });
+
+      // Pagination
+      if (totalPages > 1) {
+        const prevButton = document.createElement('button');
+        prevButton.innerHTML = '&laquo; ก่อนหน้า';
+        prevButton.className = 'px-4 py-2 text-sm text-gray-600 bg-white border rounded-lg hover:bg-gray-100 disabled:opacity-50';
+        prevButton.disabled = currentPage === 1;
+        prevButton.onclick = () => { currentPage--; renderMediaTable(); };
+        paginationControls.appendChild(prevButton);
+        
+        const pageInfo = document.createElement('span');
+        pageInfo.textContent = `หน้า ${currentPage} จาก ${totalPages}`;
+        pageInfo.className = 'text-sm text-gray-700';
+        paginationControls.appendChild(pageInfo);
+
+        const nextButton = document.createElement('button');
+        nextButton.innerHTML = 'ถัดไป &raquo;';
+        nextButton.className = 'px-4 py-2 text-sm text-gray-600 bg-white border rounded-lg hover:bg-gray-100 disabled:opacity-50';
+        nextButton.disabled = currentPage === totalPages;
+        nextButton.onclick = () => { currentPage++; renderMediaTable(); };
+        paginationControls.appendChild(nextButton);
+      }
+  }
+
+  function renderTeacherList() {
+    const listBody = document.getElementById('teacher-list-body');
+    listBody.innerHTML = '';
+    if (allTeachers.length === 0) {
+      listBody.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500">ไม่มีข้อมูลครู</td></tr>`;
+      return;
+    }
+    allTeachers.forEach(teacher => {
+      const row = document.createElement('tr');
+      row.className = 'bg-white border-b';
+      row.innerHTML = `
+        <td class="px-6 py-4">${teacher['ชื่อ-สกุล']}</td>
+        <td class="px-6 py-4">${teacher['ตำแหน่ง']}</td>
+        <td class="px-6 py-4">
+          <button class="text-red-600 hover:text-red-800" onclick="handleDeleteTeacher('${teacher['รหัสครู']}', '${teacher['ชื่อ-สกุล']}')">
+            <i data-lucide="trash-2" class="w-4 h-4"></i>
+          </button>
+        </td>
+      `;
+      listBody.appendChild(row);
+    });
+    lucide.createIcons();
+  }
+
+  // --- CHART RENDERING ---
+  function renderMonthlyChart() {
+    const ctx = document.getElementById('monthly-chart').getContext('2d');
+    const monthlyCounts = allMedia.reduce((acc, item) => {
+      const month = item['เดือน'];
+      if(month) {
+        acc[month] = (acc[month] || 0) + 1;
+      }
+      return acc;
+    }, {});
+    
+    const sortedMonths = Object.keys(monthlyCounts).sort((a, b) => new Date(`1 ${a} 2000`) - new Date(`1 ${b} 2000`));
+
+    if (monthlyChartInstance) {
+        monthlyChartInstance.destroy();
+    }
+    monthlyChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: sortedMonths,
+        datasets: [{
+          label: 'จำนวนสื่อ',
+          data: sortedMonths.map(month => monthlyCounts[month]),
+          backgroundColor: 'rgba(59, 130, 246, 0.6)',
+          borderColor: 'rgba(59, 130, 246, 1)',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+      }
+    });
+  }
+
+  function renderTypeChart() {
+    const ctx = document.getElementById('type-chart').getContext('2d');
+    const typeCounts = allMedia.reduce((acc, item) => {
+        const type = item['ประเภทสื่อ'] || 'ไม่ระบุ';
+        acc[type] = (acc[type] || 0) + 1;
+        return acc;
+    }, {});
+
+    if (typeChartInstance) {
+        typeChartInstance.destroy();
+    }
+    typeChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(typeCounts),
+            datasets: [{
+                data: Object.values(typeCounts),
+                backgroundColor: ['#3b82f6', '#10b981', '#f97316', '#a855f7'],
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'bottom',
+              }
+            }
+        }
+    });
+  }
+
+
+  // --- FORM HANDLERS ---
+  function handleRegisterSubmit(e) {
+      e.preventDefault();
+      const form = e.target;
+      const formData = {
+        sequence: form.sequence.value,
+        productionDate: form.productionDate.value,
+        mediaName: form.mediaName.value,
+        quantity: form.quantity.value,
+        mediaType: form.querySelector('input[name="mediaType"]:checked').value,
+        teacher: form.teacher.value,
+        notes: form.notes.value,
+      };
+
+      showLoading('กำลังบันทึกข้อมูล...');
+      
+      if (selectedFile) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const fileData = {
+            base64: event.target.result.split(',')[1],
+            mimeType: selectedFile.type,
+            name: selectedFile.name
+          };
+          google.script.run
+              .withSuccessHandler(onSaveSuccess)
+              .withFailureHandler(showError)
+              .addNewMedia(formData, fileData);
+        };
+        reader.readAsDataURL(selectedFile);
+      } else {
+        google.script.run
+            .withSuccessHandler(onSaveSuccess)
+            .withFailureHandler(showError)
+            .addNewMedia(formData, null);
+      }
+  }
+
+  function handleSettingsSubmit(e) {
+    e.preventDefault();
+    const newSettings = {
+      schoolName: document.getElementById('schoolName').value,
+      districtName: document.getElementById('districtName').value
+    };
+    showLoading('กำลังบันทึกการตั้งค่า...');
+    google.script.run
+        .withSuccessHandler(onSettingsSaveSuccess)
+        .withFailureHandler(showError)
+        .updateSettings(newSettings);
+  }
+  
+  function handleAddTeacherSubmit(e) {
+    e.preventDefault();
+    const form = e.target;
+    const teacherData = {
+      name: form.teacherName.value,
+      position: form.teacherPosition.value
+    };
+    showLoading('กำลังเพิ่มข้อมูลครู...');
+    google.script.run
+        .withSuccessHandler(onTeacherUpdateSuccess)
+        .withFailureHandler(showError)
+        .addTeacher(teacherData);
+    form.reset();
+  }
+  
+  function handleDeleteTeacher(id, name) {
+    Swal.fire({
+      title: 'ยืนยันการลบ',
+      text: `คุณต้องการลบ "${name}" ออกจากระบบใช่หรือไม่?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'ใช่, ลบเลย!',
+      cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        showLoading('กำลังลบข้อมูล...');
+        google.script.run
+          .withSuccessHandler(onTeacherUpdateSuccess)
+          .withFailureHandler(showError)
+          .deleteTeacher(id);
+      }
+    })
+  }
+
+  // --- SUCCESS HANDLERS ---
+  function onSaveSuccess(response) {
+    if(response.success){
+      showSuccess(response.message);
+      // Refresh all data
+      google.script.run
+        .withSuccessHandler(onInitialDataLoaded)
+        .withFailureHandler(showError)
+        .getInitialData();
+      navigateTo('#dashboard');
+    } else {
+      showError(response.error);
+    }
+  }
+
+  function onSettingsSaveSuccess(response) {
+      if(response.success){
+        showSuccess(response.message);
+        systemSettings.schoolName = document.getElementById('schoolName').value;
+        systemSettings.districtName = document.getElementById('districtName').value;
+      } else {
+        showError(response.error);
+      }
+  }
+  
+  function onTeacherUpdateSuccess(response) {
+    if(response.success){
+      showSuccess(response.message);
+      allTeachers = response.teachers;
+      renderTeacherList();
+      populateTeacherDropdowns();
+    } else {
+      showError(response.error);
+    }
+  }
+
+
+  // --- FILE HANDLING ---
+  function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function handleDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    handleFileSelect(files);
+  }
+  
+  function handleFileSelect(files) {
+    if (files && files[0]) {
+      selectedFile = files[0];
+      updateDropZonePreview(selectedFile);
+    }
+  }
+
+  function updateDropZonePreview(file) {
+    const promptEl = document.getElementById('drop-zone-prompt');
+    const thumbEl = document.getElementById('drop-zone-thumb');
+    
+    promptEl.classList.toggle('hidden', !!file);
+    thumbEl.classList.toggle('hidden', !file);
+    
+    if (file) {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        thumbEl.src = reader.result;
+      };
+    } else {
+      thumbEl.src = '';
+    }
+  }
+
+
+  // --- UTILITY & HELPER FUNCTIONS ---
+  
+  function showLoading(title) {
+    Swal.fire({
+      title: title,
+      allowOutsideClick: false,
+      didOpen: () => { Swal.showLoading(); }
+    });
+  }
+
+  function showError(error) {
+    Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: error.toString() });
+  }
+
+  function showSuccess(message) {
+    Swal.fire({ icon: 'success', title: 'สำเร็จ!', text: message, timer: 1500, showConfirmButton: false });
+  }
+  
+  function showImageModal(src) {
+    document.getElementById('modal-img').src = src;
+    document.getElementById('image-modal').classList.remove('hidden');
+    document.getElementById('image-modal').classList.add('flex');
+  }
+
+  function getBadgeColor(type) {
+    switch (type) {
+      case 'สื่อสิ่งพิมพ์': return 'bg-blue-100 text-blue-800';
+      case 'สื่อโสตทัศน์': return 'bg-green-100 text-green-800';
+      case 'สื่อเทคโนโลยี': return 'bg-orange-100 text-orange-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  }
+  
+  function handlePrint() {
+    const startDate = document.getElementById('export-start-date').value;
+    const endDate = document.getElementById('export-end-date').value;
+    const teacher = document.getElementById('export-teacher').value;
+    
+    let filtered = [...allMedia];
+    
+    if (startDate) {
+      filtered = filtered.filter(m => new Date(m['วันที่ผลิตสื่อ']) >= new Date(startDate));
+    }
+    if (endDate) {
+      filtered = filtered.filter(m => new Date(m['วันที่ผลิตสื่อ']) <= new Date(endDate));
+    }
+    if (teacher !== 'all') {
+      filtered = filtered.filter(m => m['ครูผู้ผลิตสื่อ'] === teacher);
+    }
+    
+    filtered.sort((a,b) => a['ลำดับที่'] - b['ลำดับที่']);
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>รายงานทะเบียนผลิตสื่อและอุปกรณ์</title>
+          <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+          <style>
+            body { font-family: 'Sarabun', sans-serif; }
+            .print-container { width: 95%; margin: 0 auto; }
+            .header { text-align: center; font-size: 16pt; font-weight: bold; line-height: 1.4; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12pt; }
+            th, td { border: 1px solid black; padding: 8px; text-align: left; vertical-align: middle;}
+            th { background-color: #f2f2f2; text-align: center;}
+            td:first-child, td:nth-child(4) { text-align: center; }
+            img { max-width: 80px; max-height: 60px; display: block; margin: 0 auto; }
+            @media print {
+              @page { size: A4 landscape; }
+              body { -webkit-print-color-adjust: exact; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-container">
+            <div class="header">
+              <p>ทะเบียนผลิตสื่อและอุปกรณ์</p>
+              <p>${systemSettings.schoolName} ${systemSettings.districtName}</p>
+              <p> </p>
+              ${teacher !== 'all' ? `<p>ครูผู้ผลิต: ${teacher}</p>` : ''}
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>ลำดับที่</th>
+                  <th>วันที่ผลิตสื่อ</th>
+                  <th>รายการสื่อ/อุปกรณ์</th>
+                  <th>จำนวน</th>
+                  <th>ประเภทสื่อ</th>
+                  <th>ภาพสื่อ</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${filtered.map(item => `
+                  <tr>
+                    <td><center>${String(item['ลำดับที่']).padStart(3, '0')}</center></td>
+                    <td><center>${new Date(item['วันที่ผลิตสื่อ']).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' })}</center></td>
+                    <td><center>${item['รายการสื่อ/อุปกรณ์']}</center></td>
+                    <td><center>${item['จำนวน']}</center></td>
+                    <td><center>${item['ประเภทสื่อ']}</center></td>
+                    <td><center>${item['ลิงก์ภาพสื่อ'] ? `<img src="${item['ลิงก์ภาพสื่อ']}">` : ''}</center></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </body>
+      </html>
+    `);
+    
+    setTimeout(() => {
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+        // printWindow.close(); // Uncomment if you want the window to close after printing
+    }, 500);
+  }
+
+</script>

@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- SheetJS (js-xlsx) for Excel Export/Import -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <!-- Google Fonts: Kanit and Sarabun -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            'kanit': ['Kanit', 'sans-serif'],
+            'sarabun': ['Sarabun', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Kanit', sans-serif;
+    }
+
+    /* Custom scrollbar for better aesthetics */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #888;
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+
+    /* Style for file drop area */
+    .drop-zone {
+      border: 2px dashed #ccc;
+      transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+    }
+    .drop-zone--over {
+      border-color: #007bff;
+      background-color: #f0f8ff;
+    }
+    .drop-zone__input {
+      display: none;
+    }
+    .drop-zone__thumb {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  </style>
+</head>
+
+<body class="bg-gradient-to-br from-blue-50 to-cyan-100 font-kanit text-gray-800 antialiased">
+  <div id="app" class="flex h-screen overflow-hidden">
+
+    <!-- Sidebar Navigation -->
+    <aside class="w-64 bg-white/80 backdrop-blur-md shadow-lg flex-shrink-0 flex flex-col transition-all duration-300">
+      <div class="px-6 py-4 flex items-center gap-3 border-b border-gray-200">
+        <img src="https://img5.pic.in.th/file/secure-sv1/273218374_306049724897300_8948544915894559738_n.png" alt="Logo" class="h-12 w-12">
+        <h1 class="text-lg font-bold text-blue-800">ทะเบียนสื่อ</h1>
+      </div>
+      <nav class="flex-1 px-4 py-4 space-y-2">
+        <a href="#dashboard" class="nav-link flex items-center gap-3 px-4 py-2 text-gray-600 rounded-lg hover:bg-blue-100 hover:text-blue-800 transition-colors">
+          <i data-lucide="layout-dashboard"></i> แดชบอร์ด
+        </a>
+        <a href="#register" class="nav-link flex items-center gap-3 px-4 py-2 text-gray-600 rounded-lg hover:bg-blue-100 hover:text-blue-800 transition-colors">
+          <i data-lucide="file-plus-2"></i> ลงทะเบียนสื่อ
+        </a>
+        <a href="#export" class="nav-link flex items-center gap-3 px-4 py-2 text-gray-600 rounded-lg hover:bg-blue-100 hover:text-blue-800 transition-colors">
+          <i data-lucide="printer"></i> ส่งออกข้อมูล/พิมพ์
+        </a>
+        <a href="#settings" class="nav-link flex items-center gap-3 px-4 py-2 text-gray-600 rounded-lg hover:bg-blue-100 hover:text-blue-800 transition-colors">
+          <i data-lucide="settings"></i> จัดการข้อมูล
+        </a>
+      </nav>
+      <div class="px-4 py-2 border-t border-gray-200 text-center text-xs text-gray-500">
+          <p>© 2025 ระบบทะเบียนสื่อฯ</p>
+          <p>รร.บ้านจันทน์หอมตาเสก</p>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto p-4 md:p-8">
+      
+      <!-- Page: Dashboard -->
+      <div id="page-dashboard" class="page space-y-6">
+          <h2 class="text-3xl font-bold text-blue-900">แดชบอร์ดทะเบียนสื่อ โรงเรียนบ้านนานวล</h2>
+
+          <!-- Stats Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div class="bg-white p-6 rounded-xl shadow-md flex items-center gap-4">
+                  <div class="p-3 bg-blue-100 rounded-full"><i data-lucide="archive" class="text-blue-600"></i></div>
+                  <div>
+                      <p class="text-sm text-gray-500">สื่อทั้งหมดในระบบ</p>
+                      <p id="total-media-card" class="text-2xl font-bold">0</p>
+                  </div>
+              </div>
+              <div class="bg-white p-6 rounded-xl shadow-md col-span-1 md:col-span-2">
+                  <h3 class="font-semibold mb-2 text-gray-700">ภาพรวมจำนวนสื่อ</h3>
+                  <div class="h-40">
+                      <canvas id="monthly-chart"></canvas>
+                  </div>
+              </div>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div class="bg-white p-6 rounded-xl shadow-md">
+                  <h3 class="font-semibold mb-2 text-gray-700">ประเภทสื่อ</h3>
+                  <div class="h-60">
+                      <canvas id="type-chart"></canvas>
+                  </div>
+              </div>
+
+              <!-- Media Table -->
+              <div class="bg-white p-6 rounded-xl shadow-md md:col-span-2 space-y-4">
+                  <h3 class="text-xl font-bold text-gray-800">รายการสื่อทั้งหมด</h3>
+                  <!-- Filters -->
+                  <div class="flex flex-wrap gap-4">
+                      <div class="flex-grow">
+                          <label for="filter-month" class="text-sm font-medium text-gray-600">กรองตามเดือน</label>
+                          <select id="filter-month" class="w-full mt-1 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                              <option value="all">ทุกเดือน</option>
+                          </select>
+                      </div>
+                      <div class="flex-grow">
+                          <label for="filter-teacher" class="text-sm font-medium text-gray-600">กรองตามครู</label>
+                          <select id="filter-teacher" class="w-full mt-1 p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                              <option value="all">ครูทุกคน</option>
+                          </select>
+                      </div>
+                  </div>
+
+                  <!-- Table -->
+                  <div class="overflow-x-auto">
+                      <table class="w-full text-sm text-left text-gray-500">
+                          <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                              <tr>
+                                  <th scope="col" class="px-6 py-3">ลำดับ</th>
+                                  <th scope="col" class="px-6 py-3">วันที่</th>
+                                  <th scope="col" class="px-6 py-3">รายการ</th>
+                                  <th scope="col" class="px-6 py-3">จำนวน</th>
+                                  <th scope="col" class="px-6 py-3">ประเภท</th>
+                                  <th scope="col" class="px-6 py-3">ภาพ</th>
+                              </tr>
+                          </thead>
+                          <tbody id="media-table-body">
+                              <!-- JS will populate this -->
+                          </tbody>
+                      </table>
+                  </div>
+
+                  <!-- Pagination -->
+                  <div id="pagination-controls" class="flex justify-between items-center pt-4">
+                      <!-- JS will populate this -->
+                  </div>
+              </div>
+          </div>
+      </div>
+      
+      <!-- Page: Register -->
+      <div id="page-register" class="page hidden max-w-4xl mx-auto">
+          <h2 class="text-3xl font-bold text-blue-900 mb-6">ลงทะเบียนสื่อการสอน</h2>
+          <form id="register-form" class="bg-white p-8 rounded-xl shadow-md space-y-6">
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                      <label for="sequence" class="block text-sm font-medium text-gray-700">ลำดับที่</label>
+                      <input type="number" id="sequence" name="sequence" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                  </div>
+                  <div class="md:col-span-2">
+                      <label for="productionDate" class="block text-sm font-medium text-gray-700">วันที่ผลิตสื่อ</label>
+                      <input type="date" id="productionDate" name="productionDate" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                  </div>
+              </div>
+              <div>
+                  <label for="mediaName" class="block text-sm font-medium text-gray-700">รายการสื่อ/อุปกรณ์</label>
+                  <input type="text" id="mediaName" name="mediaName" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                      <label for="quantity" class="block text-sm font-medium text-gray-700">จำนวน</label>
+                      <input type="number" id="quantity" name="quantity" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                  </div>
+                  <div>
+                      <label class="block text-sm font-medium text-gray-700">ประเภทสื่อ</label>
+                      <div class="mt-2 space-y-2">
+                          <div class="flex items-center">
+                              <input id="type-print" name="mediaType" type="radio" value="สื่อสิ่งพิมพ์" required class="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300">
+                              <label for="type-print" class="ml-3 block text-sm font-medium text-gray-700">สื่อสิ่งพิมพ์</label>
+                          </div>
+                           <div class="flex items-center">
+                              <input id="type-av" name="mediaType" type="radio" value="สื่อโสตทัศน์" class="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300">
+                              <label for="type-av" class="ml-3 block text-sm font-medium text-gray-700">สื่อโสตทัศน์</label>
+                          </div>
+                           <div class="flex items-center">
+                              <input id="type-tech" name="mediaType" type="radio" value="สื่อเทคโนโลยี" class="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300">
+                              <label for="type-tech" class="ml-3 block text-sm font-medium text-gray-700">สื่อเทคโนโลยี</label>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+              <div>
+                  <label class="block text-sm font-medium text-gray-700">ภาพสื่อ</label>
+                  <div class="mt-1">
+                      <div id="drop-zone" class="drop-zone flex justify-center items-center w-full h-48 rounded-lg p-4 cursor-pointer bg-gray-50 text-gray-400">
+                           <div id="drop-zone-prompt" class="text-center">
+                              <i data-lucide="upload-cloud" class="w-12 h-12 mx-auto"></i>
+                              <p>ลากและวางไฟล์ที่นี่ หรือคลิกเพื่ออัปโหลด</p>
+                           </div>
+                           <img id="drop-zone-thumb" class="drop-zone__thumb hidden">
+                      </div>
+                      <input type="file" id="file-upload" class="drop-zone__input" accept="image/*">
+                  </div>
+              </div>
+              <div>
+                  <label for="teacher" class="block text-sm font-medium text-gray-700">ครูผู้ผลิตสื่อ</label>
+                  <select id="teacher" name="teacher" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                      <!-- JS will populate teachers -->
+                  </select>
+              </div>
+              <div>
+                  <label for="notes" class="block text-sm font-medium text-gray-700">หมายเหตุ</label>
+                  <textarea id="notes" name="notes" rows="3" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+              </div>
+              <div class="flex justify-end gap-4">
+                  <button type="button" id="clear-form-btn" class="px-6 py-2 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-100">ล้างข้อมูล</button>
+                  <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">บันทึกข้อมูล</button>
+              </div>
+          </form>
+      </div>
+
+      <!-- Page: Export -->
+      <div id="page-export" class="page hidden max-w-4xl mx-auto">
+          <h2 class="text-3xl font-bold text-blue-900 mb-6">ส่งออกข้อมูล / พิมพ์รายงาน</h2>
+          <div class="bg-white p-8 rounded-xl shadow-md space-y-6">
+              <h3 class="text-lg font-semibold text-gray-800">ตัวกรองข้อมูล</h3>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                  <div>
+                      <label for="export-start-date" class="block text-sm font-medium text-gray-700">วันที่เริ่มต้น</label>
+                      <input type="date" id="export-start-date" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                  </div>
+                  <div>
+                      <label for="export-end-date" class="block text-sm font-medium text-gray-700">วันที่สิ้นสุด</label>
+                      <input type="date" id="export-end-date" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                  </div>
+                  <div>
+                      <label for="export-teacher" class="block text-sm font-medium text-gray-700">ครูผู้ผลิตสื่อ</label>
+                       <select id="export-teacher" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                           <option value="all">ครูทุกคน</option>
+                           <!-- JS will populate teachers -->
+                      </select>
+                  </div>
+              </div>
+              <div class="flex justify-end gap-4 pt-4 border-t">
+                  <button id="export-excel-btn" class="flex items-center gap-2 px-6 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700">
+                      <i data-lucide="file-spreadsheet"></i> ส่งออกเป็น Excel
+                  </button>
+                  <button id="print-btn" class="flex items-center gap-2 px-6 py-2 bg-sky-600 text-white rounded-lg text-sm font-semibold hover:bg-sky-700">
+                      <i data-lucide="printer"></i> พิมพ์รายงาน
+                  </button>
+              </div>
+          </div>
+      </div>
+      
+      <!-- Page: Settings -->
+      <div id="page-settings" class="page hidden max-w-4xl mx-auto space-y-8">
+          <h2 class="text-3xl font-bold text-blue-900">จัดการข้อมูลระบบ</h2>
+          <!-- School Info Form -->
+          <div class="bg-white p-8 rounded-xl shadow-md">
+              <h3 class="text-lg font-semibold text-gray-800 mb-4">ข้อมูลโรงเรียนและหน่วยงาน</h3>
+              <form id="settings-form" class="space-y-4">
+                  <div>
+                      <label for="schoolName" class="block text-sm font-medium text-gray-700">ชื่อโรงเรียน</label>
+                      <input type="text" id="schoolName" name="schoolName" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                  </div>
+                  <div>
+                      <label for="districtName" class="block text-sm font-medium text-gray-700">ชื่อเขตพื้นที่การศึกษา</label>
+                      <input type="text" id="districtName" name="districtName" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                  </div>
+                  <div class="text-right">
+                       <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">บันทึกข้อมูล</button>
+                  </div>
+              </form>
+          </div>
+
+          <!-- Teacher Management -->
+          <div class="bg-white p-8 rounded-xl shadow-md">
+              <div class="flex justify-between items-center mb-4">
+                  <h3 class="text-lg font-semibold text-gray-800">จัดการข้อมูลครู</h3>
+                  <div>
+                      <button id="import-teacher-btn" class="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-semibold hover:bg-blue-600">
+                          <i data-lucide="file-up"></i> นำเข้าข้อมูล
+                      </button>
+                      <input type="file" id="teacher-import-input" class="hidden" accept=".xlsx, .xls, .csv">
+                  </div>
+              </div>
+              <p class="text-xs text-gray-500 mb-6 -mt-2">
+                  *นำเข้าจากไฟล์ Excel (.xlsx) โดยต้องมีคอลัมน์ <code class="bg-gray-200 px-1 rounded">ชื่อ-สกุล</code> และ <code class="bg-gray-200 px-1 rounded">ตำแหน่ง</code>
+              </p>
+              <form id="add-teacher-form" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end mb-6">
+                  <div class="md:col-span-2">
+                      <label for="teacherName" class="block text-sm font-medium text-gray-700">ชื่อ-สกุล (เพิ่มทีละคน)</label>
+                      <input type="text" id="teacherName" name="teacherName" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                  </div>
+                  <div>
+                      <label for="teacherPosition" class="block text-sm font-medium text-gray-700">ตำแหน่ง</label>
+                      <input type="text" id="teacherPosition" name="teacherPosition" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                  </div>
+                   <div class="md:col-span-3 text-right">
+                       <button type="submit" class="px-6 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700">เพิ่มครู</button>
+                  </div>
+              </form>
+              <div class="overflow-x-auto">
+                  <table class="w-full text-sm text-left text-gray-500">
+                       <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                          <tr>
+                              <th scope="col" class="px-6 py-3">ชื่อ-สกุล</th>
+                              <th scope="col" class="px-6 py-3">ตำแหน่ง</th>
+                              <th scope="col" class="px-6 py-3">จัดการ</th>
+                          </tr>
+                      </thead>
+                      <tbody id="teacher-list-body">
+                          <!-- JS will populate teacher list -->
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      </div>
+       <!-- Footer -->
+       <footer class="text-center mt-8 text-sm text-gray-500">
+           © 2025 ระบบทะเบียนสื่อการสอน โรงเรียนบ้านนานวล | ผู้พัฒนา <a href="https://www.facebook.com/TomKhunakorn" target="_blank" class="text-blue-600 hover:underline">นายคุณากร ธนที</a>
+       </footer>
+    </main>
+
+    <!-- Image Modal -->
+    <div id="image-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center z-50">
+        <div class="p-4 bg-white rounded-lg max-w-3xl max-h-3xl">
+            <img id="modal-img" src="" alt="Full size media" class="max-w-full max-h-[80vh] object-contain">
+        </div>
+        <button id="close-modal" class="absolute top-4 right-4 text-white text-3xl">&times;</button>
+    </div>
+
+  </div>
+
+  <script>
+    // --- STATE MANAGEMENT ---
+    let allMedia = [];
+    let allTeachers = [];
+    let systemSettings = {};
+    let currentFilters = { month: 'all', teacher: 'all' };
+    let currentPage = 1;
+    const ROWS_PER_PAGE = 15;
+    let selectedFile = null;
+    let monthlyChartInstance = null;
+    let typeChartInstance = null;
+  
+    // --- INITIALIZATION ---
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      showLoading('กำลังโหลดข้อมูลเริ่มต้น...');
+      google.script.run
+        .withSuccessHandler(onInitialDataLoaded)
+        .withFailureHandler(showError)
+        .getInitialData();
+  
+      setupEventListeners();
+      navigateTo(window.location.hash || '#dashboard');
+    });
+  
+    function onInitialDataLoaded(data) {
+      if (data.success) {
+        allMedia = data.media;
+        allTeachers = data.teachers;
+        systemSettings = data.settings;
+  
+        renderDashboard();
+        populateTeacherDropdowns();
+        renderRegisterPage(data.nextId);
+        renderSettingsPage();
+        renderExportPage();
+  
+        Swal.close();
+      } else {
+        showError(data.error);
+      }
+    }
+  
+    // --- EVENT LISTENERS ---
+    function setupEventListeners() {
+      // Navigation
+      document.querySelectorAll('.nav-link').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          navigateTo(e.currentTarget.getAttribute('href'));
+        });
+      });
+  
+      // Dashboard filters
+      document.getElementById('filter-month').addEventListener('change', (e) => {
+        currentFilters.month = e.target.value;
+        currentPage = 1;
+        renderMediaTable();
+      });
+      document.getElementById('filter-teacher').addEventListener('change', (e) => {
+        currentFilters.teacher = e.target.value;
+        currentPage = 1;
+        renderMediaTable();
+      });
+  
+      // Register Form
+      document.getElementById('register-form').addEventListener('submit', handleRegisterSubmit);
+      document.getElementById('clear-form-btn').addEventListener('click', () => renderRegisterPage());
+  
+      // File Drop Zone
+      const dropZone = document.getElementById('drop-zone');
+      const fileInput = document.getElementById('file-upload');
+      dropZone.addEventListener('click', () => fileInput.click());
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+      });
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.classList.add('drop-zone--over'), false);
+      });
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.classList.remove('drop-zone--over'), false);
+      });
+      dropZone.addEventListener('drop', handleDrop, false);
+      fileInput.addEventListener('change', (e) => handleFileSelect(e.target.files));
+  
+      // Settings Form
+      document.getElementById('settings-form').addEventListener('submit', handleSettingsSubmit);
+      document.getElementById('add-teacher-form').addEventListener('submit', handleAddTeacherSubmit);
+      document.getElementById('import-teacher-btn').addEventListener('click', () => {
+          document.getElementById('teacher-import-input').click();
+      });
+      document.getElementById('teacher-import-input').addEventListener('change', handleTeacherImport);
+
+      // Export/Print
+      document.getElementById('export-excel-btn').addEventListener('click', handleExcelExport);
+      document.getElementById('print-btn').addEventListener('click', handlePrint);
+      
+      // Image Modal
+      document.getElementById('close-modal').addEventListener('click', () => document.getElementById('image-modal').classList.add('hidden'));
+      document.getElementById('image-modal').addEventListener('click', (e) => {
+        if(e.target === e.currentTarget) {
+           document.getElementById('image-modal').classList.add('hidden');
+        }
+      });
+  
+    }
+  
+  
+    // --- NAVIGATION & PAGE RENDERING ---
+    function navigateTo(hash) {
+      document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
+      const targetPage = document.querySelector(`#page-${hash.substring(1)}`);
+      if (targetPage) {
+        targetPage.classList.remove('hidden');
+      } else {
+        document.getElementById('page-dashboard').classList.remove('hidden');
+      }
+  
+      document.querySelectorAll('.nav-link').forEach(link => {
+        if (link.getAttribute('href') === hash) {
+          link.classList.add('bg-blue-100', 'text-blue-800', 'font-semibold');
+        } else {
+          link.classList.remove('bg-blue-100', 'text-blue-800', 'font-semibold');
+        }
+      });
+      window.location.hash = hash;
+    }
+    
+    function renderDashboard() {
+      // Render cards and charts first
+      document.getElementById('total-media-card').textContent = allMedia.length;
+      renderMonthlyChart();
+      renderTypeChart();
+  
+      // Populate filters and render table
+      populateDashboardFilters();
+      renderMediaTable();
+    }
+    
+    function renderRegisterPage(nextId = null) {
+        const form = document.getElementById('register-form');
+        form.reset();
+        const nextMediaId = nextId || (allMedia.length > 0 ? Math.max(...allMedia.map(m => m['ลำดับที่'])) + 1 : 1);
+        document.getElementById('sequence').value = nextMediaId;
+        document.getElementById('productionDate').value = new Date().toISOString().split('T')[0];
+        updateDropZonePreview(null);
+        selectedFile = null;
+    }
+    
+    function renderSettingsPage() {
+      document.getElementById('schoolName').value = systemSettings.schoolName || '';
+      document.getElementById('districtName').value = systemSettings.districtName || '';
+      renderTeacherList();
+    }
+    
+    function renderExportPage() {
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('export-start-date').value = '';
+      document.getElementById('export-end-date').value = today;
+    }
+  
+    // --- COMPONENT RENDERING ---
+    
+    function populateTeacherDropdowns() {
+      const teacherSelects = document.querySelectorAll('#teacher, #filter-teacher, #export-teacher');
+      teacherSelects.forEach(select => {
+          const currentValue = select.value;
+          // Clear all except the first option if it exists
+          while (select.options.length > (select.id !== 'teacher' ? 1 : 0)) {
+              select.remove(select.id !== 'teacher' ? 1 : 0);
+          }
+          allTeachers.forEach(teacher => {
+              const option = document.createElement('option');
+              option.value = teacher['ชื่อ-สกุล'];
+              option.textContent = `${teacher['ชื่อ-สกุล']} (${teacher['ตำแหน่ง']})`;
+              select.appendChild(option);
+          });
+          select.value = currentValue;
+      });
+    }
+    
+    function populateDashboardFilters() {
+        const monthFilter = document.getElementById('filter-month');
+        monthFilter.innerHTML = '<option value="all">ทุกเดือน</option>';
+        const months = [...new Set(allMedia.map(item => item['เดือน']))].filter(Boolean);
+        months.sort((a, b) => new Date(`1 ${a} 2000`) - new Date(`1 ${b} 2000`));
+        months.forEach(month => {
+            const option = new Option(month, month);
+            monthFilter.appendChild(option);
+        });
+    }
+  
+    function renderMediaTable() {
+        const tableBody = document.getElementById('media-table-body');
+        const paginationControls = document.getElementById('pagination-controls');
+        tableBody.innerHTML = '';
+        paginationControls.innerHTML = '';
+  
+        let filteredMedia = [...allMedia];
+  
+        if (currentFilters.month !== 'all') {
+          filteredMedia = filteredMedia.filter(m => m['เดือน'] === currentFilters.month);
+        }
+        if (currentFilters.teacher !== 'all') {
+          filteredMedia = filteredMedia.filter(m => m['ครูผู้ผลิตสื่อ'] === currentFilters.teacher);
+        }
+        
+        // Sort by sequence number descending
+        filteredMedia.sort((a, b) => b['ลำดับที่'] - a['ลำดับที่']);
+  
+        const totalPages = Math.ceil(filteredMedia.length / ROWS_PER_PAGE);
+        if (currentPage > totalPages && totalPages > 0) {
+          currentPage = totalPages;
+        }
+        const start = (currentPage - 1) * ROWS_PER_PAGE;
+        const end = start + ROWS_PER_PAGE;
+        const paginatedMedia = filteredMedia.slice(start, end);
+  
+        if (paginatedMedia.length === 0) {
+          tableBody.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-gray-500">ไม่พบข้อมูลสื่อ</td></tr>`;
+          return;
+        }
+        
+        paginatedMedia.forEach(item => {
+            const row = document.createElement('tr');
+            row.className = 'bg-white border-b hover:bg-gray-50';
+            const formattedDate = item['วันที่ผลิตสื่อ'] ? new Date(item['วันที่ผลิตสื่อ']).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
+            const imageUrl = item['ลิงก์ภาพสื่อ'];
+            const imageHtml = imageUrl 
+              ? `<img src="${imageUrl}" alt="Media thumbnail" class="w-16 h-12 object-cover rounded-md cursor-pointer hover:opacity-75" onclick="showImageModal('${imageUrl}')">`
+              : '<span class="text-gray-400">ไม่มีภาพ</span>';
+  
+            row.innerHTML = `
+              <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">${String(item['ลำดับที่']).padStart(3,'0')}</td>
+              <td class="px-6 py-4">${formattedDate}</td>
+              <td class="px-6 py-4">${item['รายการสื่อ/อุปกรณ์']}</td>
+              <td class="px-6 py-4">${item['จำนวน']}</td>
+              <td class="px-6 py-4"><span class="px-2 py-1 text-xs font-medium rounded-full ${getBadgeColor(item['ประเภทสื่อ'])}">${item['ประเภทสื่อ']}</span></td>
+              <td class="px-6 py-4">${imageHtml}</td>
+            `;
+            tableBody.appendChild(row);
+        });
+  
+        // Pagination
+        if (totalPages > 1) {
+          const prevButton = document.createElement('button');
+          prevButton.innerHTML = '&laquo; ก่อนหน้า';
+          prevButton.className = 'px-4 py-2 text-sm text-gray-600 bg-white border rounded-lg hover:bg-gray-100 disabled:opacity-50';
+          prevButton.disabled = currentPage === 1;
+          prevButton.onclick = () => { currentPage--; renderMediaTable(); };
+          paginationControls.appendChild(prevButton);
+          
+          const pageInfo = document.createElement('span');
+          pageInfo.textContent = `หน้า ${currentPage} จาก ${totalPages}`;
+          pageInfo.className = 'text-sm text-gray-700';
+          paginationControls.appendChild(pageInfo);
+  
+          const nextButton = document.createElement('button');
+          nextButton.innerHTML = 'ถัดไป &raquo;';
+          nextButton.className = 'px-4 py-2 text-sm text-gray-600 bg-white border rounded-lg hover:bg-gray-100 disabled:opacity-50';
+          nextButton.disabled = currentPage === totalPages;
+          nextButton.onclick = () => { currentPage++; renderMediaTable(); };
+          paginationControls.appendChild(nextButton);
+        }
+    }
+  
+    function renderTeacherList() {
+      const listBody = document.getElementById('teacher-list-body');
+      listBody.innerHTML = '';
+      if (allTeachers.length === 0) {
+        listBody.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-500">ไม่มีข้อมูลครู</td></tr>`;
+        return;
+      }
+      allTeachers.forEach(teacher => {
+        const row = document.createElement('tr');
+        row.className = 'bg-white border-b';
+        row.innerHTML = `
+          <td class="px-6 py-4">${teacher['ชื่อ-สกุล']}</td>
+          <td class="px-6 py-4">${teacher['ตำแหน่ง']}</td>
+          <td class="px-6 py-4">
+            <button class="text-red-600 hover:text-red-800" onclick="handleDeleteTeacher('${teacher['รหัสครู']}', '${teacher['ชื่อ-สกุล']}')">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </td>
+        `;
+        listBody.appendChild(row);
+      });
+      lucide.createIcons();
+    }
+  
+    // --- CHART RENDERING ---
+    function renderMonthlyChart() {
+      const ctx = document.getElementById('monthly-chart').getContext('2d');
+      const monthlyCounts = allMedia.reduce((acc, item) => {
+        const month = item['เดือน'];
+        if(month) {
+          acc[month] = (acc[month] || 0) + 1;
+        }
+        return acc;
+      }, {});
+      
+      const sortedMonths = Object.keys(monthlyCounts).sort((a, b) => new Date(`1 ${a} 2000`) - new Date(`1 ${b} 2000`));
+  
+      if (monthlyChartInstance) {
+          monthlyChartInstance.destroy();
+      }
+      monthlyChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: sortedMonths,
+          datasets: [{
+            label: 'จำนวนสื่อ',
+            data: sortedMonths.map(month => monthlyCounts[month]),
+            backgroundColor: 'rgba(59, 130, 246, 0.6)',
+            borderColor: 'rgba(59, 130, 246, 1)',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+    }
+  
+    function renderTypeChart() {
+      const ctx = document.getElementById('type-chart').getContext('2d');
+      const typeCounts = allMedia.reduce((acc, item) => {
+          const type = item['ประเภทสื่อ'] || 'ไม่ระบุ';
+          acc[type] = (acc[type] || 0) + 1;
+          return acc;
+      }, {});
+  
+      if (typeChartInstance) {
+          typeChartInstance.destroy();
+      }
+      typeChartInstance = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+              labels: Object.keys(typeCounts),
+              datasets: [{
+                  data: Object.values(typeCounts),
+                  backgroundColor: ['#3b82f6', '#10b981', '#f97316', '#a855f7'],
+                  hoverOffset: 4
+              }]
+          },
+          options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  position: 'bottom',
+                }
+              }
+          }
+      });
+    }
+  
+  
+    // --- FORM HANDLERS ---
+    function handleRegisterSubmit(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = {
+          sequence: form.sequence.value,
+          productionDate: form.productionDate.value,
+          mediaName: form.mediaName.value,
+          quantity: form.quantity.value,
+          mediaType: form.querySelector('input[name="mediaType"]:checked').value,
+          teacher: form.teacher.value,
+          notes: form.notes.value,
+        };
+  
+        showLoading('กำลังบันทึกข้อมูล...');
+        
+        if (selectedFile) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const fileData = {
+              base64: event.target.result.split(',')[1],
+              mimeType: selectedFile.type,
+              name: selectedFile.name
+            };
+            google.script.run
+                .withSuccessHandler(onSaveSuccess)
+                .withFailureHandler(showError)
+                .addNewMedia(formData, fileData);
+          };
+          reader.readAsDataURL(selectedFile);
+        } else {
+          google.script.run
+              .withSuccessHandler(onSaveSuccess)
+              .withFailureHandler(showError)
+              .addNewMedia(formData, null);
+        }
+    }
+  
+    function handleSettingsSubmit(e) {
+      e.preventDefault();
+      const newSettings = {
+        schoolName: document.getElementById('schoolName').value,
+        districtName: document.getElementById('districtName').value
+      };
+      showLoading('กำลังบันทึกการตั้งค่า...');
+      google.script.run
+          .withSuccessHandler(onSettingsSaveSuccess)
+          .withFailureHandler(showError)
+          .updateSettings(newSettings);
+    }
+    
+    function handleAddTeacherSubmit(e) {
+      e.preventDefault();
+      const form = e.target;
+      const teacherData = {
+        name: form.teacherName.value,
+        position: form.teacherPosition.value
+      };
+      showLoading('กำลังเพิ่มข้อมูลครู...');
+      google.script.run
+          .withSuccessHandler(onTeacherUpdateSuccess)
+          .withFailureHandler(showError)
+          .addTeacher(teacherData);
+      form.reset();
+    }
+    
+    function handleDeleteTeacher(id, name) {
+      Swal.fire({
+        title: 'ยืนยันการลบ',
+        text: `คุณต้องการลบ "${name}" ออกจากระบบใช่หรือไม่?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'ใช่, ลบเลย!',
+        cancelButtonText: 'ยกเลิก'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          showLoading('กำลังลบข้อมูล...');
+          google.script.run
+            .withSuccessHandler(onTeacherUpdateSuccess)
+            .withFailureHandler(showError)
+            .deleteTeacher(id);
+        }
+      })
+    }
+  
+    // --- SUCCESS HANDLERS ---
+    function onSaveSuccess(response) {
+      if(response.success){
+        showSuccess(response.message);
+        // Refresh all data
+        google.script.run
+          .withSuccessHandler(onInitialDataLoaded)
+          .withFailureHandler(showError)
+          .getInitialData();
+        navigateTo('#dashboard');
+      } else {
+        showError(response.error);
+      }
+    }
+  
+    function onSettingsSaveSuccess(response) {
+        if(response.success){
+          showSuccess(response.message);
+          systemSettings.schoolName = document.getElementById('schoolName').value;
+          systemSettings.districtName = document.getElementById('districtName').value;
+        } else {
+          showError(response.error);
+        }
+    }
+    
+    function onTeacherUpdateSuccess(response) {
+      if(response.success){
+        showSuccess(response.message);
+        allTeachers = response.teachers;
+        renderTeacherList();
+        populateTeacherDropdowns();
+      } else {
+        showError(response.error);
+      }
+    }
+  
+  
+    // --- FILE HANDLING ---
+    function handleTeacherImport(event) {
+        const file = event.target.files[0];
+        if (!file) {
+            return;
+        }
+
+        showLoading('กำลังประมวลผลไฟล์...');
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+                if (jsonData.length === 0) {
+                    showError('ไฟล์ที่นำเข้าว่างเปล่า');
+                    return;
+                }
+
+                // Validate headers
+                const firstRow = jsonData[0];
+                if (!firstRow.hasOwnProperty('ชื่อ-สกุล') || !firstRow.hasOwnProperty('ตำแหน่ง')) {
+                    showError('ไฟล์ที่นำเข้าต้องมีคอลัมน์ "ชื่อ-สกุล" และ "ตำแหน่ง"');
+                    return;
+                }
+                
+                showLoading('กำลังนำเข้าข้อมูลครู...');
+                google.script.run
+                    .withSuccessHandler(onTeacherUpdateSuccess)
+                    .withFailureHandler(showError)
+                    .importTeachers(jsonData);
+
+            } catch (err) {
+                showError('เกิดข้อผิดพลาดในการอ่านไฟล์: ' + err.message);
+            } finally {
+                // Reset file input to allow re-uploading the same file
+                event.target.value = '';
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    function preventDefaults(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  
+    function handleDrop(e) {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      handleFileSelect(files);
+    }
+    
+    function handleFileSelect(files) {
+      if (files && files[0]) {
+        selectedFile = files[0];
+        updateDropZonePreview(selectedFile);
+      }
+    }
+  
+    function updateDropZonePreview(file) {
+      const promptEl = document.getElementById('drop-zone-prompt');
+      const thumbEl = document.getElementById('drop-zone-thumb');
+      
+      promptEl.classList.toggle('hidden', !!file);
+      thumbEl.classList.toggle('hidden', !file);
+      
+      if (file) {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => {
+          thumbEl.src = reader.result;
+        };
+      } else {
+        thumbEl.src = '';
+      }
+    }
+  
+  
+    // --- UTILITY & HELPER FUNCTIONS ---
+    
+    function showLoading(title) {
+      Swal.fire({
+        title: title,
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+      });
+    }
+  
+    function showError(error) {
+      Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: error.toString() });
+    }
+  
+    function showSuccess(message) {
+      Swal.fire({ icon: 'success', title: 'สำเร็จ!', text: message, timer: 1500, showConfirmButton: false });
+    }
+    
+    function showImageModal(src) {
+      document.getElementById('modal-img').src = src;
+      document.getElementById('image-modal').classList.remove('hidden');
+      document.getElementById('image-modal').classList.add('flex');
+    }
+  
+    function getBadgeColor(type) {
+      switch (type) {
+        case 'สื่อสิ่งพิมพ์': return 'bg-blue-100 text-blue-800';
+        case 'สื่อโสตทัศน์': return 'bg-green-100 text-green-800';
+        case 'สื่อเทคโนโลยี': return 'bg-orange-100 text-orange-800';
+        default: return 'bg-gray-100 text-gray-800';
+      }
+    }
+    
+    function handleExcelExport() {
+      const startDate = document.getElementById('export-start-date').value;
+      const endDate = document.getElementById('export-end-date').value;
+      const teacher = document.getElementById('export-teacher').value;
+      
+      let filtered = [...allMedia];
+      
+      if (startDate) {
+        filtered = filtered.filter(m => new Date(m['วันที่ผลิตสื่อ']) >= new Date(startDate));
+      }
+      if (endDate) {
+        filtered = filtered.filter(m => new Date(m['วันที่ผลิตสื่อ']) <= new Date(endDate));
+      }
+      if (teacher !== 'all') {
+        filtered = filtered.filter(m => m['ครูผู้ผลิตสื่อ'] === teacher);
+      }
+      
+      filtered.sort((a,b) => a['ลำดับที่'] - b['ลำดับที่']);
+      
+      // Prepare data for export
+      const exportData = filtered.map(item => ({
+        'ลำดับที่': String(item['ลำดับที่']).padStart(3, '0'),
+        'วันที่ผลิตสื่อ': new Date(item['วันที่ผลิตสื่อ']).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        'รายการสื่อ/อุปกรณ์': item['รายการสื่อ/อุปกรณ์'],
+        'จำนวน': item['จำนวน'],
+        'ประเภทสื่อ': item['ประเภทสื่อ'],
+        'ครูผู้ผลิตสื่อ': item['ครูผู้ผลิตสื่อ'],
+        'หมายเหตุ': item['หมายเหตุ'],
+        'ลิงก์ภาพสื่อ': item['ลิงก์ภาพสื่อ']
+      }));
+
+      // Create a worksheet
+      const ws = XLSX.utils.json_to_sheet(exportData);
+
+      // Create a workbook
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "ทะเบียนสื่อ");
+
+      // Generate a filename
+      const fileName = `ทะเบียนสื่อ_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+      // Trigger the download
+      XLSX.writeFile(wb, fileName);
+    }
+    
+    function handlePrint() {
+      const startDate = document.getElementById('export-start-date').value;
+      const endDate = document.getElementById('export-end-date').value;
+      const teacher = document.getElementById('export-teacher').value;
+      
+      let filtered = [...allMedia];
+      
+      if (startDate) {
+        filtered = filtered.filter(m => new Date(m['วันที่ผลิตสื่อ']) >= new Date(startDate));
+      }
+      if (endDate) {
+        filtered = filtered.filter(m => new Date(m['วันที่ผลิตสื่อ']) <= new Date(endDate));
+      }
+      if (teacher !== 'all') {
+        filtered = filtered.filter(m => m['ครูผู้ผลิตสื่อ'] === teacher);
+      }
+      
+      filtered.sort((a,b) => a['ลำดับที่'] - b['ลำดับที่']);
+      
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>รายงานทะเบียนผลิตสื่อและอุปกรณ์</title>
+            <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+            <style>
+              body { font-family: 'Sarabun', sans-serif; }
+              .print-container { width: 95%; margin: 0 auto; }
+              .header { text-align: center; font-size: 16pt; font-weight: bold; line-height: 1.4; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12pt; }
+              th, td { border: 1px solid black; padding: 8px; text-align: left; vertical-align: middle;}
+              th { background-color: #f2f2f2; text-align: center;}
+              td:first-child, td:nth-child(4) { text-align: center; }
+              img { max-width: 80px; max-height: 60px; display: block; margin: 0 auto; }
+              @media print {
+                @page { size: A4 landscape; }
+                body { -webkit-print-color-adjust: exact; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="print-container">
+              <div class="header">
+                <p>ทะเบียนผลิตสื่อและอุปกรณ์</p>
+                <p>${systemSettings.schoolName} ${systemSettings.districtName}</p>
+                <p> </p>
+                ${teacher !== 'all' ? `<p>ครูผู้ผลิต: ${teacher}</p>` : ''}
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>ลำดับที่</th>
+                    <th>วันที่ผลิตสื่อ</th>
+                    <th>รายการสื่อ/อุปกรณ์</th>
+                    <th>จำนวน</th>
+                    <th>ประเภทสื่อ</th>
+                    <th>ภาพสื่อ</th>
+                    <th>ครูผู้ผลิตสื่อ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${filtered.map(item => `
+                    <tr>
+                      <td>${String(item['ลำดับที่']).padStart(3, '0')}</td>
+                      <td><center>${new Date(item['วันที่ผลิตสื่อ']).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' })}</center></td>
+                      <td>${item['รายการสื่อ/อุปกรณ์']}</td>
+                      <td>${item['จำนวน']}</td>
+                      <td><center>${item['ประเภทสื่อ']}</center></td>
+                      <td>${item['ลิงก์ภาพสื่อ'] ? `<img src="${item['ลิงก์ภาพสื่อ']}">` : ''}</td>
+                      <td><center>${item['ครูผู้ผลิตสื่อ'] || ''}</center></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </body>
+        </html>
+      `);
+      
+      setTimeout(() => {
+          printWindow.document.close();
+          printWindow.focus();
+          printWindow.print();
+          // printWindow.close(); // Uncomment if you want the window to close after printing
+      }, 500);
+    }
+  
+  </script>
+</body>
+</html>
